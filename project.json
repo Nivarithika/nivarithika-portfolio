@@ -1,0 +1,24 @@
+{
+  "overview": "A premium, modern, dark-themed personal portfolio website for Nivarithika M — featuring 10 animated sections, neon glow aesthetics, glassmorphism cards, smooth scroll animations, and a responsive mobile layout.",
+  "features": [
+    "Dark theme with neon pink and violet gradients",
+    "Opening life quote with animated gradient background",
+    "Hero section with glowing profile photo and floating animation",
+    "About, Education, Skills, Projects, Certifications, Experience sections",
+    "Career Vision and Creative Work (book coming soon) sections",
+    "Contact form with email, phone, and LinkedIn info",
+    "Glassmorphism cards with hover lift and glow effects",
+    "Smooth fade-in, slide-up, and parallax scroll animations",
+    "Responsive mobile layout with hamburger navigation"
+  ],
+  "category": "showcase",
+  "tags": [
+    "portfolio",
+    "dark-theme",
+    "neon",
+    "glassmorphism",
+    "animations",
+    "personal-branding"
+  ],
+  "last_updated": "2026-04-13T13:57:14.145Z"
+}
