@@ -1,6 +1,10 @@
 import { useScrollAnimation } from "@/hooks/useScrollAnimation";
 import { CheckCircle, Linkedin, Mail, Phone, Send } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useForm } from "react-hook-form";
+
+// Replace YOUR_FORM_ID with your actual Formspree form ID from formspree.io
+const FORMSPREE_ENDPOINT = "https://formspree.io/f/mqewqnqq";
 
 const CONTACT_INFO = [
   {
@@ -26,25 +30,125 @@ const CONTACT_INFO = [
   },
 ];
 
+type FormValues = {
+  name: string;
+  email: string;
+  message: string;
+};
+
+// Glow styles for focused/blurred neon inputs
+const glowFocus = (
+  e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>,
+  color: "pink" | "violet",
+) => {
+  const border =
+    color === "pink"
+      ? "oklch(0.68 0.26 317 / 0.5)"
+      : "oklch(0.55 0.24 274 / 0.5)";
+  const shadow =
+    color === "pink"
+      ? "0 0 15px oklch(0.68 0.26 317 / 0.1)"
+      : "0 0 15px oklch(0.55 0.24 274 / 0.1)";
+  e.currentTarget.style.borderColor = border;
+  e.currentTarget.style.boxShadow = shadow;
+};
+
+const glowBlur = (
+  e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>,
+  hasError: boolean,
+) => {
+  e.currentTarget.style.borderColor = hasError
+    ? "oklch(0.68 0.26 317 / 0.7)"
+    : "oklch(0.93 0 0 / 0.08)";
+  e.currentTarget.style.boxShadow = "none";
+};
+
 export function ContactSection() {
   const headingRef = useScrollAnimation<HTMLDivElement>({ threshold: 0.2 });
   const contentRef = useScrollAnimation<HTMLDivElement>({ threshold: 0.1 });
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    message: "",
-  });
-  const [submitted, setSubmitted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.name || !formData.email || !formData.message) return;
-    setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1000));
-    setSubmitted(true);
-    setSubmitting(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(false);
+
+  // Refs for manually restoring border after validation
+  const nameRef = useRef<HTMLInputElement | null>(null);
+  const emailRef = useRef<HTMLInputElement | null>(null);
+  const messageRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<FormValues>({ mode: "onBlur" });
+
+  // Register field refs so we can spread RHF props
+  const {
+    ref: nameRHFRef,
+    onBlur: nameOnBlur,
+    ...nameRest
+  } = register("name", {
+    required: "Name is required.",
+    minLength: { value: 2, message: "Name must be at least 2 characters." },
+  });
+
+  const {
+    ref: emailRHFRef,
+    onBlur: emailOnBlur,
+    ...emailRest
+  } = register("email", {
+    required: "Email is required.",
+    pattern: {
+      value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+      message: "Please enter a valid email address.",
+    },
+  });
+
+  const {
+    ref: messageRHFRef,
+    onBlur: messageOnBlur,
+    ...messageRest
+  } = register("message", {
+    required: "Message is required.",
+    minLength: {
+      value: 10,
+      message: "Message must be at least 10 characters.",
+    },
+  });
+
+  // 3-second cooldown after successful submission
+  useEffect(() => {
+    if (!submitted) return;
+    setCooldown(true);
+    const timer = setTimeout(() => setCooldown(false), 3000);
+    return () => clearTimeout(timer);
+  }, [submitted]);
+
+  const onSubmit = async (data: FormValues) => {
+    setSubmitError(null);
+    try {
+      const res = await fetch(FORMSPREE_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          name: data.name,
+          email: data.email,
+          message: data.message,
+        }),
+      });
+      if (!res.ok) throw new Error("Server returned an error response.");
+      reset();
+      setSubmitted(true);
+    } catch {
+      setSubmitError("Something went wrong. Please try again.");
+    }
   };
+
+  const isDisabled = isSubmitting || cooldown;
 
   return (
     <section
@@ -180,22 +284,34 @@ export function ContactSection() {
                 >
                   Message Sent!
                 </h3>
+                <p
+                  className="text-sm font-medium"
+                  style={{ color: "oklch(0.72 0.19 165)" }}
+                  data-ocid="contact.success_state"
+                >
+                  Message sent! I&apos;ll get back to you soon.
+                </p>
                 <p className="text-muted-foreground text-sm">
-                  Thank you for reaching out. I&apos;ll get back to you soon!
+                  Thank you for reaching out. I&apos;ll respond within 24 hours!
                 </p>
                 <button
                   type="button"
-                  onClick={() => setSubmitted(false)}
-                  className="btn-outline-neon px-6 py-2.5 rounded-full text-sm font-semibold mt-2"
+                  disabled={cooldown}
+                  onClick={() => {
+                    setSubmitted(false);
+                    setSubmitError(null);
+                  }}
+                  className="btn-outline-neon px-6 py-2.5 rounded-full text-sm font-semibold mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Send Another
+                  {cooldown ? "Please wait..." : "Send Another"}
                 </button>
               </div>
             ) : (
               <form
-                onSubmit={handleSubmit}
+                onSubmit={handleSubmit(onSubmit)}
                 className="flex flex-col gap-5"
                 aria-label="Contact form"
+                noValidate
               >
                 <h3
                   className="text-lg font-bold text-foreground mb-1"
@@ -204,6 +320,7 @@ export function ContactSection() {
                   Send a Message
                 </h3>
 
+                {/* Name */}
                 <div className="flex flex-col gap-1.5">
                   <label
                     htmlFor="contact-name"
@@ -214,32 +331,39 @@ export function ContactSection() {
                   <input
                     id="contact-name"
                     type="text"
-                    data-ocid="contact-name-input"
-                    value={formData.name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, name: e.target.value })
-                    }
+                    data-ocid="contact.name_input"
                     placeholder="Nivarithika M"
-                    required
                     className="w-full px-4 py-3 rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 transition-smooth focus:outline-none"
                     style={{
                       background: "oklch(0.08 0 0 / 0.6)",
-                      border: "1px solid oklch(0.93 0 0 / 0.08)",
+                      border: errors.name
+                        ? "1px solid oklch(0.68 0.26 317 / 0.7)"
+                        : "1px solid oklch(0.93 0 0 / 0.08)",
                     }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor =
-                        "oklch(0.68 0.26 317 / 0.5)";
-                      e.currentTarget.style.boxShadow =
-                        "0 0 15px oklch(0.68 0.26 317 / 0.1)";
-                    }}
+                    onFocus={(e) => glowFocus(e, "pink")}
                     onBlur={(e) => {
-                      e.currentTarget.style.borderColor =
-                        "oklch(0.93 0 0 / 0.08)";
-                      e.currentTarget.style.boxShadow = "none";
+                      nameOnBlur(e);
+                      glowBlur(e, !!errors.name);
                     }}
+                    ref={(el) => {
+                      nameRef.current = el;
+                      nameRHFRef(el);
+                    }}
+                    {...nameRest}
                   />
+                  {errors.name && (
+                    <p
+                      className="text-xs font-medium"
+                      style={{ color: "#FF4D8D" }}
+                      data-ocid="contact.name_field_error"
+                      role="alert"
+                    >
+                      {errors.name.message}
+                    </p>
+                  )}
                 </div>
 
+                {/* Email */}
                 <div className="flex flex-col gap-1.5">
                   <label
                     htmlFor="contact-email"
@@ -250,32 +374,39 @@ export function ContactSection() {
                   <input
                     id="contact-email"
                     type="email"
-                    data-ocid="contact-email-input"
-                    value={formData.email}
-                    onChange={(e) =>
-                      setFormData({ ...formData, email: e.target.value })
-                    }
+                    data-ocid="contact.email_input"
                     placeholder="hello@example.com"
-                    required
                     className="w-full px-4 py-3 rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 transition-smooth focus:outline-none"
                     style={{
                       background: "oklch(0.08 0 0 / 0.6)",
-                      border: "1px solid oklch(0.93 0 0 / 0.08)",
+                      border: errors.email
+                        ? "1px solid oklch(0.68 0.26 317 / 0.7)"
+                        : "1px solid oklch(0.93 0 0 / 0.08)",
                     }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor =
-                        "oklch(0.55 0.24 274 / 0.5)";
-                      e.currentTarget.style.boxShadow =
-                        "0 0 15px oklch(0.55 0.24 274 / 0.1)";
-                    }}
+                    onFocus={(e) => glowFocus(e, "violet")}
                     onBlur={(e) => {
-                      e.currentTarget.style.borderColor =
-                        "oklch(0.93 0 0 / 0.08)";
-                      e.currentTarget.style.boxShadow = "none";
+                      emailOnBlur(e);
+                      glowBlur(e, !!errors.email);
                     }}
+                    ref={(el) => {
+                      emailRef.current = el;
+                      emailRHFRef(el);
+                    }}
+                    {...emailRest}
                   />
+                  {errors.email && (
+                    <p
+                      className="text-xs font-medium"
+                      style={{ color: "#FF4D8D" }}
+                      data-ocid="contact.email_field_error"
+                      role="alert"
+                    >
+                      {errors.email.message}
+                    </p>
+                  )}
                 </div>
 
+                {/* Message */}
                 <div className="flex flex-col gap-1.5">
                   <label
                     htmlFor="contact-message"
@@ -285,46 +416,68 @@ export function ContactSection() {
                   </label>
                   <textarea
                     id="contact-message"
-                    data-ocid="contact-message-input"
-                    value={formData.message}
-                    onChange={(e) =>
-                      setFormData({ ...formData, message: e.target.value })
-                    }
+                    data-ocid="contact.message_textarea"
                     placeholder="Tell me what's on your mind..."
-                    required
                     rows={4}
                     className="w-full px-4 py-3 rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 transition-smooth focus:outline-none resize-none"
                     style={{
                       background: "oklch(0.08 0 0 / 0.6)",
-                      border: "1px solid oklch(0.93 0 0 / 0.08)",
+                      border: errors.message
+                        ? "1px solid oklch(0.68 0.26 317 / 0.7)"
+                        : "1px solid oklch(0.93 0 0 / 0.08)",
                     }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor =
-                        "oklch(0.68 0.26 317 / 0.5)";
-                      e.currentTarget.style.boxShadow =
-                        "0 0 15px oklch(0.68 0.26 317 / 0.1)";
-                    }}
+                    onFocus={(e) => glowFocus(e, "pink")}
                     onBlur={(e) => {
-                      e.currentTarget.style.borderColor =
-                        "oklch(0.93 0 0 / 0.08)";
-                      e.currentTarget.style.boxShadow = "none";
+                      messageOnBlur(e);
+                      glowBlur(e, !!errors.message);
                     }}
+                    ref={(el) => {
+                      messageRef.current = el;
+                      messageRHFRef(el);
+                    }}
+                    {...messageRest}
                   />
+                  {errors.message && (
+                    <p
+                      className="text-xs font-medium"
+                      style={{ color: "#FF4D8D" }}
+                      data-ocid="contact.message_field_error"
+                      role="alert"
+                    >
+                      {errors.message.message}
+                    </p>
+                  )}
                 </div>
+
+                {/* Submit error */}
+                {submitError && (
+                  <p
+                    className="text-xs font-medium text-center px-3 py-2 rounded-lg"
+                    style={{
+                      color: "#FF4D8D",
+                      background: "oklch(0.68 0.26 317 / 0.08)",
+                      border: "1px solid oklch(0.68 0.26 317 / 0.2)",
+                    }}
+                    data-ocid="contact.error_state"
+                    role="alert"
+                  >
+                    {submitError}
+                  </p>
+                )}
 
                 <button
                   type="submit"
-                  data-ocid="contact-submit"
-                  disabled={submitting}
+                  data-ocid="contact.submit_button"
+                  disabled={isDisabled}
                   className="btn-neon w-full py-3.5 rounded-xl font-semibold text-white flex items-center justify-center gap-2.5 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  {submitting ? (
+                  {isSubmitting ? (
                     <>
                       <div
                         className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin"
                         aria-hidden="true"
                       />
-                      Sending...
+                      <span data-ocid="contact.loading_state">Sending...</span>
                     </>
                   ) : (
                     <>
